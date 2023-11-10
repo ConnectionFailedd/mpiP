@@ -926,7 +926,7 @@ def StandardFileHeader(fname):
     olist.append("/* DO NOT EDIT -- AUTOMATICALLY GENERATED! */\n")
     olist.append("/* Timestamp: " + time.strftime("%d %B %Y %H:%M", time.localtime(time.time())) + "  */\n")
     olist.append("/* Location: " + socket.gethostname () + " " + os.name + " */\n")
-    olist.append("/* Creator: " + os.environ["LOGNAME"] + "  */\n")
+    #olist.append("/* Creator: " + os.environ["LOGNAME"] + "  */\n")
     olist.append("\n")
     olist.append("\n")
     return olist
@@ -1114,7 +1114,146 @@ def CreateWrapper(funct, olist):
     olist.append("if (mpiPi_stats_mt_is_on(hndl)) {\n")
     olist.append("\n"
                  + "mpiPi_GETTIME (&end);\n"
-                 + "dur = mpiPi_GETTIMEDIFF (&end, &start);\n")
+                 + "dur = mpiPi_GETTIMEDIFF (&end, &start);\n\n")
+
+    # __NYA__
+    olist.append(
+'''
+FILE * nyaFp;
+char nyaFileName[256];
+int nyaRank;
+MPI_Comm_rank(MPI_COMM_WORLD, &nyaRank);
+sprintf(nyaFileName, "trace/trace_%d", nyaRank);
+if(!nyaFlags[nyaRank]) {
+    nyaFp = fopen(nyaFileName, "w");
+    fprintf(nyaFp, "[\\n");
+    fprintf(nyaFp, "    {");
+}
+else {
+    nyaFp = fopen(nyaFileName, "r+");
+    fseek(nyaFp, -2, SEEK_END);
+    fprintf(nyaFp, ",\\n");
+    fprintf(nyaFp, "    {");
+}
+nyaFlags[nyaRank] ++;
+
+char nyaBuf[256];
+MPI_Info nyaInfo;
+int nyaLength;
+int nyaFlags;
+int nyaNKeys;
+char nyaKey[256];
+char nyaValue[256];
+int nyaGroupRank;
+int nyaGroupSize;
+'''
+    )
+    olist.append(f'fprintf(nyaFp, "\'function\': \'{funct}\', ");\n')
+    olist.append(f'fprintf(nyaFp, "\'arguments\': {{");\n')
+    for i in fdict[funct].paramConciseList:
+        if (fdict[funct].paramDict[i].pointerLevel == 0) \
+           and (fdict[funct].paramDict[i].arrayLevel == 0) \
+           and (fdict[funct].paramDict[i].basetype != "void"):
+            if fdict[funct].paramDict[i].basetype == 'MPI_Datatype':
+                olist.append(f'MPI_Type_get_name(* {i}, nyaBuf, &nyaLength);\n')
+                olist.append(f'if(nyaBuf[0]) {{\n')
+                olist.append(f'    fprintf(nyaFp, "\'{i}:MPI_Datatype\': \'%s\'", nyaBuf);\n')
+                olist.append(f'}}\n')
+                olist.append(f'else {{\n')
+                olist.append(f'    fprintf(nyaFp, "\'{i}:MPI_Datatype\': \'USER_DEFINED\'");\n')
+                olist.append(f'}}\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Comm':
+                olist.append(f'MPI_Comm_rank(* {i}, &nyaRank);\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Comm\': %d", nyaRank);\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Aint':
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Aint\': %ld", * {i});\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Offset':
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Offset\': %lld", * {i});\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Op':
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Op\': \'%s\'", get_op_name(* {i}));\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Group':
+                olist.append(f'MPI_Group_size(* {i}, &nyaGroupSize);')
+                olist.append(f'MPI_Group_size(* {i}, &nyaGroupRank);')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Group\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'group_size\': %d, ", nyaGroupSize);\n')
+                olist.append(f'fprintf(nyaFp, "\'group_rank\': %d", nyaGroupRank);\n')
+                olist.append(f'fprintf(nyaFp, "}}");\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Win':
+                olist.append(f'MPI_Win_get_info(* {i}, &nyaInfo);\n')
+                olist.append(f'MPI_Info_get_nkeys(nyaInfo, &nyaNKeys);\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Win\': {{");\n')
+                olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
+                olist.append(f'    MPI_Info_get_nthkey(nyaInfo, i, nyaKey);\n')
+                olist.append(f'    MPI_Info_get(nyaInfo, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
+                olist.append(f'    if(i != nyaNKeys - 1) {{\n')
+                olist.append(f'        fprintf(nyaFp, "\'%s\': \'%s\', ", nyaKey, nyaValue);\n')
+                olist.append(f'    }}\n')
+                olist.append(f'    else {{\n')
+                olist.append(f'        fprintf(nyaFp, "\'%s\': \'%s\'", nyaKey, nyaValue);\n')
+                olist.append(f'    }}\n')
+                olist.append(f'}}\n')
+                olist.append(f'fprintf(nyaFp, "}}");\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_File':
+                olist.append(f'MPI_File_get_info(* {i}, &nyaInfo);\n')
+                olist.append(f'MPI_Info_get_nkeys(nyaInfo, &nyaNKeys);\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_File\': {{");\n')
+                olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
+                olist.append(f'    MPI_Info_get_nthkey(nyaInfo, i, nyaKey);\n')
+                olist.append(f'    MPI_Info_get(nyaInfo, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
+                olist.append(f'    if(i != nyaNKeys - 1) {{\n')
+                olist.append(f'        fprintf(nyaFp, "\'%s\': \'%s\', ", nyaKey, nyaValue);\n')
+                olist.append(f'    }}\n')
+                olist.append(f'    else {{\n')
+                olist.append(f'        fprintf(nyaFp, "\'%s\': \'%s\'", nyaKey, nyaValue);\n')
+                olist.append(f'    }}\n')
+                olist.append(f'}}\n')
+                olist.append(f'fprintf(nyaFp, "}}");\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Info':
+                olist.append(f'MPI_Info_get_nkeys(* {i}, &nyaNKeys);\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Info\': {{");\n')
+                olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
+                olist.append(f'    MPI_Info_get_nthkey(* {i}, i, nyaKey);\n')
+                olist.append(f'    MPI_Info_get(* {i}, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
+                olist.append(f'    if(i != nyaNKeys - 1) {{\n')
+                olist.append(f'        fprintf(nyaFp, "\'%s\': \'%s\', ", nyaKey, nyaValue);\n')
+                olist.append(f'    }}\n')
+                olist.append(f'    else {{\n')
+                olist.append(f'        fprintf(nyaFp, "\'%s\': \'%s\'", nyaKey, nyaValue);\n')
+                olist.append(f'    }}\n')
+                olist.append(f'}}\n')
+                olist.append(f'fprintf(nyaFp, "}}");\n')
+            else:
+                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %d", * {i});\n')
+        elif (fdict[funct].paramDict[i].pointerLevel > 0):
+            olist.append(f'if({i} == NULL) {{\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': None");\n')
+            olist.append(f'}}\n')
+            olist.append(f'else {{\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': %p", {i});\n')
+            olist.append(f'}}\n')
+        elif (fdict[funct].paramDict[i].arrayLevel > 0):
+            olist.append(f'if({i} == NULL) {{\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': None");\n')
+            olist.append(f'}}\n')
+            olist.append(f'else {{\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': %p", {i});\n')
+            olist.append(f'}}\n')
+        else:
+            print("Warning: passing on arg", i, "in", funct)
+        if fdict[funct].paramConciseList.index(i) < len(fdict[funct].paramConciseList) - 1:
+            olist.append(f'fprintf(nyaFp, ", ");\n')
+        # else:
+        #     olist.append(f'fprintf(nyaFp, "\\n");\n')
+    olist.append(f'fprintf(nyaFp, "}}");\n')
+
+    olist.append(
+'''
+fprintf(nyaFp, "}\\n");
+fprintf(nyaFp, "]");
+fflush(nyaFp);
+fclose(nyaFp);
+'''
+    )
 
     #  Calculate message size based on count and datatype arguments
     if fdict[funct].sendCountPname != "":
@@ -1394,7 +1533,7 @@ def CreateWrapper(funct, olist):
     for i in stringVarNames :
         olist.append("  for(; " + i + "_len > 0; " + i + "_len--){\n")
         olist.append("    if( " + i + "[" + i + "_len] != ' '){\n")
-        olist.append("      " + i +"_len++; // The length is last symbol index + 1\n")
+        olist.append("      " + i +"_len++; // The nyaLength is last symbol index + 1\n")
         olist.append("      break;\n")
         olist.append("    }\n")
         olist.append("  }\n");
@@ -1549,6 +1688,43 @@ def GenerateWrappers():
     olist.append("#include \"mpiPi_def.h\"\n")
     olist.append("\n")
 
+    # __NYA__
+    olist.append(
+'''
+#include <stdio.h>
+
+static int nyaFlags[32];
+
+typedef struct {
+    MPI_Op op;
+    const char * name;
+} mpi_op_name_pair_t;
+static mpi_op_name_pair_t mpi_op_name_map[] = {
+    {MPI_MAX, "MPI_MAX"},
+    {MPI_MIN, "MPI_MIN"},
+    {MPI_SUM, "MPI_SUM"},
+    {MPI_PROD, "MPI_PROD"},
+    {MPI_LAND, "MPI_LAND"},
+    {MPI_BAND, "MPI_BAND"},
+    {MPI_LOR, "MPI_LOR"},
+    {MPI_BOR, "MPI_BOR"},
+    {MPI_LXOR, "MPI_LXOR"},
+    {MPI_BXOR, "MPI_BXOR"},
+    {MPI_MAXLOC, "MPI_MAXLOC"},
+    {MPI_MINLOC, "MPI_MINLOC"}
+};
+
+const char * get_op_name(MPI_Op op) {
+    for(int i = 0; i < 12; i ++) {
+        if(op == mpi_op_name_map[i].op) {
+            return mpi_op_name_map[i].name;
+        }
+    }
+    return "USER_DEFINED";
+}
+'''
+    )
+
     for funct in flist:
         CreateWrapper(funct, olist)
     olist.append("\n")
@@ -1702,6 +1878,12 @@ def main():
     if doWeakSymbols == True :
       GenerateWeakSymbols()
     GenerateLookup()
+    typeset = set()
+    for funcName, func in fdict.items():
+        for paramName in func.paramConciseList:
+            typeset.add(func.paramDict[paramName].basetype)
+
+    print(typeset)
 
 
 #####
