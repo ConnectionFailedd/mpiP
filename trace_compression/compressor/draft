@@ -1,0 +1,28 @@
+types: int, ptr, MPI_Op, MPI_Datatype, MPI_Group, MPI_Info
+int, ptr: 0 + 1bit, 10 + 4 bit, 11 + 6bit length + <length>bit data
+MPI_Op: int4
+MPI_Datatype: int4
+MPI_Group: int, int
+MPI_Info: strings, use metadata + int form
+
+function list: [(function name, arguments: [(argument name, argument type)])]
+
+trace:
+    str: str,
+    str: {
+        str: int | MPI_Op | MPI_Datatype | MPI_Group | MPI_Info: {
+            str: str
+        }
+    }
+
+classes:
+trace:
+    load
+    iterate
+utils:
+    compress int
+    add string and make huffman tree
+    function list manage
+compressor:
+    travel and find all strings
+    add content and dump file

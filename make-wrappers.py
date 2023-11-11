@@ -1154,7 +1154,16 @@ int nyaGroupSize;
         if (fdict[funct].paramDict[i].pointerLevel == 0) \
            and (fdict[funct].paramDict[i].arrayLevel == 0) \
            and (fdict[funct].paramDict[i].basetype != "void"):
-            if fdict[funct].paramDict[i].basetype == 'MPI_Datatype':
+            if fdict[funct].paramDict[i].basetype == 'MPI_Comm':
+                olist.append(f'MPI_Comm_rank(* {i}, &nyaRank);\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %d", nyaRank);\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Aint':
+                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %ld", * {i});\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Offset':
+                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %lld", * {i});\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Op':
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Op\': \'%s\'", get_op_name(* {i}));\n')
+            elif fdict[funct].paramDict[i].basetype == 'MPI_Datatype':
                 olist.append(f'MPI_Type_get_name(* {i}, nyaBuf, &nyaLength);\n')
                 olist.append(f'if(nyaBuf[0]) {{\n')
                 olist.append(f'    fprintf(nyaFp, "\'{i}:MPI_Datatype\': \'%s\'", nyaBuf);\n')
@@ -1162,18 +1171,9 @@ int nyaGroupSize;
                 olist.append(f'else {{\n')
                 olist.append(f'    fprintf(nyaFp, "\'{i}:MPI_Datatype\': \'USER_DEFINED\'");\n')
                 olist.append(f'}}\n')
-            elif fdict[funct].paramDict[i].basetype == 'MPI_Comm':
-                olist.append(f'MPI_Comm_rank(* {i}, &nyaRank);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Comm\': %d", nyaRank);\n')
-            elif fdict[funct].paramDict[i].basetype == 'MPI_Aint':
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Aint\': %ld", * {i});\n')
-            elif fdict[funct].paramDict[i].basetype == 'MPI_Offset':
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Offset\': %lld", * {i});\n')
-            elif fdict[funct].paramDict[i].basetype == 'MPI_Op':
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Op\': \'%s\'", get_op_name(* {i}));\n')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Group':
                 olist.append(f'MPI_Group_size(* {i}, &nyaGroupSize);')
-                olist.append(f'MPI_Group_size(* {i}, &nyaGroupRank);')
+                olist.append(f'MPI_Group_rank(* {i}, &nyaGroupRank);')
                 olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Group\': {{");\n')
                 olist.append(f'fprintf(nyaFp, "\'group_size\': %d, ", nyaGroupSize);\n')
                 olist.append(f'fprintf(nyaFp, "\'group_rank\': %d", nyaGroupRank);\n')
@@ -1181,7 +1181,7 @@ int nyaGroupSize;
             elif fdict[funct].paramDict[i].basetype == 'MPI_Win':
                 olist.append(f'MPI_Win_get_info(* {i}, &nyaInfo);\n')
                 olist.append(f'MPI_Info_get_nkeys(nyaInfo, &nyaNKeys);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Win\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Info\': {{");\n')
                 olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
                 olist.append(f'    MPI_Info_get_nthkey(nyaInfo, i, nyaKey);\n')
                 olist.append(f'    MPI_Info_get(nyaInfo, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
@@ -1196,7 +1196,7 @@ int nyaGroupSize;
             elif fdict[funct].paramDict[i].basetype == 'MPI_File':
                 olist.append(f'MPI_File_get_info(* {i}, &nyaInfo);\n')
                 olist.append(f'MPI_Info_get_nkeys(nyaInfo, &nyaNKeys);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_File\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Info\': {{");\n')
                 olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
                 olist.append(f'    MPI_Info_get_nthkey(nyaInfo, i, nyaKey);\n')
                 olist.append(f'    MPI_Info_get(nyaInfo, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
@@ -1226,14 +1226,14 @@ int nyaGroupSize;
                 olist.append(f'fprintf(nyaFp, "\'{i}:int\': %d", * {i});\n')
         elif (fdict[funct].paramDict[i].pointerLevel > 0):
             olist.append(f'if({i} == NULL) {{\n')
-            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': None");\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': 0x0");\n')
             olist.append(f'}}\n')
             olist.append(f'else {{\n')
             olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': %p", {i});\n')
             olist.append(f'}}\n')
         elif (fdict[funct].paramDict[i].arrayLevel > 0):
             olist.append(f'if({i} == NULL) {{\n')
-            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': None");\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': 0x0");\n')
             olist.append(f'}}\n')
             olist.append(f'else {{\n')
             olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': %p", {i});\n')
