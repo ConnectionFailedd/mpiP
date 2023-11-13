@@ -5,7 +5,7 @@ MPI_Datatype: int4
 MPI_Group: int, int
 MPI_Info: strings, use metadata + int form
 
-function list: [(function name, arguments: [(argument name, argument type)])]
+function dict: {functionName: {id: int, arguments: {argumentName: argumentType}}}
 
 trace:
     str: str,
@@ -14,15 +14,3 @@ trace:
             str: str
         }
     }
-
-classes:
-trace:
-    load
-    iterate
-utils:
-    compress int
-    add string and make huffman tree
-    function list manage
-compressor:
-    travel and find all strings
-    add content and dump file
