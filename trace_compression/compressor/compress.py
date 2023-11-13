@@ -179,7 +179,7 @@ def generate_bitstream(stringList, traceCode):
     for string in stringList:
         bitIndex = add_int(bitstream, bitIndex, len(string))
         for char in string:
-            bitIndex = add_int(bitstream, bitIndex, ord(char))
+            bitIndex = add_int7(bitstream, bitIndex, ord(char))
 
     for code in traceCode:
         bitIndex = add_int(bitstream, bitIndex, code)
@@ -256,16 +256,16 @@ def decompress(sourceFileName, targetFileName):
                 elif argumentType == 'MPI_Datatype':
                     targetFile.write(f'\'{argumentName}\': \'{argumentValue}\'')
                 elif argumentType == 'MPI_Group':
-                    targetFile.write(f'{argumentName}: {{\'group_size\': {argumentValue["group_size"]}, \'group_rank\': {argumentValue["group_rank"]}}}')
+                    targetFile.write(f'\'{argumentName}\': {{\'group_size\': {argumentValue["group_size"]}, \'group_rank\': {argumentValue["group_rank"]}}}')
                 elif argumentType in ['MPI_Info', 'MPI_Win', 'MPI_File']:
-                    targetFile.write(f'{argumentName}: {{')
+                    targetFile.write(f'\'{argumentName}\': {{')
                     k = 0
-                    for key, value in argumentValue:
+                    for key, value in argumentValue.items():
                         targetFile.write(f'\'{key}\': \'{value}\'')
                         if k < len(argumentValue) - 1:
                             targetFile.write(', ')
                         k += 1
-                    targetFile.write(f'{argumentName}: }}')
+                    targetFile.write(f'}}')
                 if j < len(functionDict[functionName]['arguments']) - 1:
                     targetFile.write(', ')
                 j += 1
@@ -277,5 +277,5 @@ def decompress(sourceFileName, targetFileName):
         targetFile.write(']')
 
 if __name__ == '__main__':
-    compress('../trace/trace_0', 'compressed')
+    compress('../trace/trace_1', 'compressed')
     decompress('compressed', 'decompressed')
