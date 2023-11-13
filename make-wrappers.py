@@ -1154,7 +1154,8 @@ int nyaGroupSize;
     )
     olist.append(f'fprintf(nyaFp, "\'function\': \'{funct}\', ");\n')
     olist.append(f'fprintf(nyaFp, "\'arguments\': {{");\n')
-    functionListFile.write(f'    {funct}: {{\'id\': {functionID}, \'arguments\': {{')
+    functionListFile.write(f'    \'{funct}\': {{\'id\': {functionID}, \'arguments\': {{')
+    functionID += 1
     for i in fdict[funct].paramConciseList:
         if (fdict[funct].paramDict[i].pointerLevel == 0) \
            and (fdict[funct].paramDict[i].arrayLevel == 0) \
@@ -1259,11 +1260,11 @@ int nyaGroupSize;
             print("Warning: passing on arg", i, "in", funct)
         if fdict[funct].paramConciseList.index(i) < len(fdict[funct].paramConciseList) - 1:
             olist.append(f'fprintf(nyaFp, ", ");\n')
-            functionListFile.write(f'\'{i}\': \', \'')
+            functionListFile.write(f', ')
         # else:
         #     olist.append(f'fprintf(nyaFp, "\\n");\n')
     olist.append(f'fprintf(nyaFp, "}}");\n')
-    functionListFile.write('}\n')
+    functionListFile.write('}},\n')
 
     olist.append(
 '''
