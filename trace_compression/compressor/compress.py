@@ -1,4 +1,5 @@
 from function_dict import functionDict, functionList
+import math
 
 mpiOpList = ['MPI_MAX', 'MPI_MIN', 'MPI_SUM', 'MPI_PROD', 'MPI_LAND', 'MPI_BAND', 'MPI_LOR', 'MPI_BOR', 'MPI_LXOR', 'MPI_BXOR', 'MPI_MAXLOC', 'MPI_MINLOC', 'USER_DEFINED']
 mpiTypeList = ['MPI_CHAR', 'MPI_SHORT', 'MPI_INT', 'MPI_LONG', 'MPI_UNSIGNED_CHAR', 'MPI_SHORT', 'MPI_UNSIGNED', 'MPI_UNSIGNED_LONG', 'MPI_FLOAT', 'MPI_DOUBLE', 'MPI_LONG_DOUBLE', 'MPI_BYTE', 'MPI_PACKED']
@@ -63,6 +64,37 @@ def encode_trace(trace, stringList):
 
 def decode_trace(stringList, codeList):
     trace = []
+    entryNumber = codeList[0]
+    index = 1
+    for _ in range(entryNumber):
+        functionID = codeList[index]
+        index += 1
+        functionName = functionList[functionID]
+        arguments = {}
+        for argumentName, argumentType in functionDict[functionName]['arguments'].items():
+            if argumentType == 'int' or argumentType == 'ptr':
+                arguments[argumentName] = codeList[index]
+                index += 1
+            elif argumentType == 'MPI_Op':
+                arguments[argumentName] = mpiOpList[codeList[index]]
+                index += 1
+            elif argumentType == 'MPI_Datatype':
+                arguments[argumentName] = mpiTypeList[codeList[index]]
+                index += 1
+            elif argumentType == 'MPI_Group':
+                arguments[argumentName] = {}
+                arguments[argumentName]['group_size'] = codeList[index]
+                index += 1
+                arguments[argumentName]['group_rank'] = codeList[index]
+                index += 1
+            elif argumentType in ['MPI_Info', 'MPI_Win', 'MPI_File']:
+                arguments[argumentName] = {}
+                number = codeList[index]
+                index += 1
+                for _ in range(number):
+                    arguments[argumentName][stringList[codeList[index]]] = stringList[codeList[index + 1]]
+                    index += 2
+        trace.append({'function': functionName, 'arguments': arguments})
     return trace
 
 def add_int(bitstream, bitIndex, integer):
@@ -77,8 +109,8 @@ def add_int(bitstream, bitIndex, integer):
         code = (integer << 8) + (integerBits << 2) + 3
         codeLength = 8 + integerBits
     while codeLength != 0:
-        buffer = (code % (1 << (8 - bitIndex))) << bitIndex
-        bufferLength = min(codeLength, 8 - bitIndex)
+        buffer = (code % (1 << (8 - (bitIndex % 8)))) << (bitIndex % 8)
+        bufferLength = min(codeLength, 8 - (bitIndex % 8))
         code >>= bufferLength
         codeLength -= bufferLength
         if bitIndex % 8 == 0:
@@ -93,8 +125,8 @@ def add_int7(bitstream, bitIndex, integer):
     code = integer
     codeLength = 7
     while codeLength != 0:
-        buffer = (code % (1 << (8 - bitIndex))) << bitIndex
-        bufferLength = min(codeLength, 8 - bitIndex)
+        buffer = (code % (1 << (8 - (bitIndex % 8)))) << (bitIndex % 8)
+        bufferLength = min(codeLength, 8 - (bitIndex % 8))
         code >>= bufferLength
         codeLength -= bufferLength
         if bitIndex % 8 == 0:
@@ -106,11 +138,10 @@ def add_int7(bitstream, bitIndex, integer):
     return bitIndex
 
 def get_bit(bitstream, bitIndex):
-    byteIndex = bitIndex / 8
+    byteIndex = math.floor(bitIndex / 8)
     return bitIndex + 1, (bitstream[byteIndex] >> (bitIndex % 8)) % 2
 
 def read_int(bitstream, bitIndex):
-    byteIndex = bitIndex / 8
     bitIndex, bit = get_bit(bitstream, bitIndex)
     if bit == 0:
         return get_bit(bitstream, bitIndex)
@@ -169,7 +200,7 @@ def extract_bitstream(bitstream):
         stringList.append(string)
 
     bitIndex, entryNumber = read_int(bitstream, bitIndex)
-    codeList = []
+    codeList = [entryNumber]
     for _ in range(entryNumber):
         bitIndex, functionID = read_int(bitstream, bitIndex)
         functionName = functionList[functionID]
@@ -206,7 +237,45 @@ def decompress(sourceFileName, targetFileName):
     stringList, traceCode = extract_bitstream(bitstream)
     trace = decode_trace(stringList, traceCode)
     with open(targetFileName, 'w') as targetFile:
-        targetFile.write('{\n')
+        targetFile.write('[\n')
+        i = 0
         for entry in trace:
-            targetFile.write(str(entry))
-        targetFile.write('}')
+            targetFile.write('    {')
+            functionName = entry['function']
+            arguments = entry['arguments']
+            targetFile.write(f'\'function\': \'{functionName}\', \'arguments\': {{')
+            j = 0
+            for argumentName, argumentType in functionDict[functionName]['arguments'].items():
+                argumentValue = arguments[argumentName]
+                if argumentType == 'int':
+                    targetFile.write(f'\'{argumentName}\': {argumentValue}')
+                if argumentType == 'ptr':
+                    targetFile.write(f'\'{argumentName}\': {hex(argumentValue)}')
+                elif argumentType == 'MPI_Op':
+                    targetFile.write(f'\'{argumentName}\': \'{argumentValue}\'')
+                elif argumentType == 'MPI_Datatype':
+                    targetFile.write(f'\'{argumentName}\': \'{argumentValue}\'')
+                elif argumentType == 'MPI_Group':
+                    targetFile.write(f'{argumentName}: {{\'group_size\': {argumentValue["group_size"]}, \'group_rank\': {argumentValue["group_rank"]}}}')
+                elif argumentType in ['MPI_Info', 'MPI_Win', 'MPI_File']:
+                    targetFile.write(f'{argumentName}: {{')
+                    k = 0
+                    for key, value in argumentValue:
+                        targetFile.write(f'\'{key}\': \'{value}\'')
+                        if k < len(argumentValue) - 1:
+                            targetFile.write(', ')
+                        k += 1
+                    targetFile.write(f'{argumentName}: }}')
+                if j < len(functionDict[functionName]['arguments']) - 1:
+                    targetFile.write(', ')
+                j += 1
+            if i < len(trace) - 1:
+                targetFile.write('}},\n')
+            else:
+                targetFile.write('}}\n')
+            i += 1
+        targetFile.write(']')
+
+if __name__ == '__main__':
+    compress('../trace/trace_0', 'compressed')
+    decompress('compressed', 'decompressed')
