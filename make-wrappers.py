@@ -1016,14 +1016,18 @@ def GenerateLookup():
     g.writelines(olist)
     g.close()
 
+# __NYA__
+functionID = 0
 
 ###
 ### Create a MPI wrapper for one function using the information in the function dict.
 ### First, generate a generic wrapper, and then the FORTRAN, C wrappers.
 ###
-def CreateWrapper(funct, olist):
+def CreateWrapper(funct, olist, functionListFile):
     global fdict
     global arch
+    # __NYA__
+    global functionID
 
     if fdict[funct].nowrapper:
         return
@@ -1150,38 +1154,45 @@ int nyaGroupSize;
     )
     olist.append(f'fprintf(nyaFp, "\'function\': \'{funct}\', ");\n')
     olist.append(f'fprintf(nyaFp, "\'arguments\': {{");\n')
+    functionListFile.write(f'    {funct}: {{\'id\': {functionID}, \'arguments\': {{')
     for i in fdict[funct].paramConciseList:
         if (fdict[funct].paramDict[i].pointerLevel == 0) \
            and (fdict[funct].paramDict[i].arrayLevel == 0) \
            and (fdict[funct].paramDict[i].basetype != "void"):
             if fdict[funct].paramDict[i].basetype == 'MPI_Comm':
                 olist.append(f'MPI_Comm_rank(* {i}, &nyaRank);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %d", nyaRank);\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': %d", nyaRank);\n')
+                functionListFile.write(f'\'{i}\': \'int\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Aint':
-                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %ld", * {i});\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': %ld", * {i});\n')
+                functionListFile.write(f'\'{i}\': \'int\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Offset':
-                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %lld", * {i});\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': %lld", * {i});\n')
+                functionListFile.write(f'\'{i}\': \'int\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Op':
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Op\': \'%s\'", get_op_name(* {i}));\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': \'%s\'", get_op_name(* {i}));\n')
+                functionListFile.write(f'\'{i}\': \'MPI_Op\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Datatype':
                 olist.append(f'MPI_Type_get_name(* {i}, nyaBuf, &nyaLength);\n')
                 olist.append(f'if(nyaBuf[0]) {{\n')
-                olist.append(f'    fprintf(nyaFp, "\'{i}:MPI_Datatype\': \'%s\'", nyaBuf);\n')
+                olist.append(f'    fprintf(nyaFp, "\'{i}\': \'%s\'", nyaBuf);\n')
                 olist.append(f'}}\n')
                 olist.append(f'else {{\n')
-                olist.append(f'    fprintf(nyaFp, "\'{i}:MPI_Datatype\': \'USER_DEFINED\'");\n')
+                olist.append(f'    fprintf(nyaFp, "\'{i}\': \'USER_DEFINED\'");\n')
                 olist.append(f'}}\n')
+                functionListFile.write(f'\'{i}\': \'MPI_Datatype\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Group':
                 olist.append(f'MPI_Group_size(* {i}, &nyaGroupSize);')
                 olist.append(f'MPI_Group_rank(* {i}, &nyaGroupRank);')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Group\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': {{");\n')
                 olist.append(f'fprintf(nyaFp, "\'group_size\': %d, ", nyaGroupSize);\n')
                 olist.append(f'fprintf(nyaFp, "\'group_rank\': %d", nyaGroupRank);\n')
                 olist.append(f'fprintf(nyaFp, "}}");\n')
+                functionListFile.write(f'\'{i}\': \'MPI_Group\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Win':
                 olist.append(f'MPI_Win_get_info(* {i}, &nyaInfo);\n')
                 olist.append(f'MPI_Info_get_nkeys(nyaInfo, &nyaNKeys);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Info\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': {{");\n')
                 olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
                 olist.append(f'    MPI_Info_get_nthkey(nyaInfo, i, nyaKey);\n')
                 olist.append(f'    MPI_Info_get(nyaInfo, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
@@ -1193,10 +1204,11 @@ int nyaGroupSize;
                 olist.append(f'    }}\n')
                 olist.append(f'}}\n')
                 olist.append(f'fprintf(nyaFp, "}}");\n')
+                functionListFile.write(f'\'{i}\': \'MPI_Group\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_File':
                 olist.append(f'MPI_File_get_info(* {i}, &nyaInfo);\n')
                 olist.append(f'MPI_Info_get_nkeys(nyaInfo, &nyaNKeys);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Info\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': {{");\n')
                 olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
                 olist.append(f'    MPI_Info_get_nthkey(nyaInfo, i, nyaKey);\n')
                 olist.append(f'    MPI_Info_get(nyaInfo, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
@@ -1208,9 +1220,10 @@ int nyaGroupSize;
                 olist.append(f'    }}\n')
                 olist.append(f'}}\n')
                 olist.append(f'fprintf(nyaFp, "}}");\n')
+                functionListFile.write(f'\'{i}\': \'MPI_File\'')
             elif fdict[funct].paramDict[i].basetype == 'MPI_Info':
                 olist.append(f'MPI_Info_get_nkeys(* {i}, &nyaNKeys);\n')
-                olist.append(f'fprintf(nyaFp, "\'{i}:MPI_Info\': {{");\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': {{");\n')
                 olist.append(f'for(int i = 0; i < nyaNKeys; i ++) {{')
                 olist.append(f'    MPI_Info_get_nthkey(* {i}, i, nyaKey);\n')
                 olist.append(f'    MPI_Info_get(* {i}, nyaKey, MPI_MAX_INFO_VAL, nyaValue, &nyaFlags);\n')
@@ -1222,29 +1235,35 @@ int nyaGroupSize;
                 olist.append(f'    }}\n')
                 olist.append(f'}}\n')
                 olist.append(f'fprintf(nyaFp, "}}");\n')
+                functionListFile.write(f'\'{i}\': \'MPI_Info\'')
             else:
-                olist.append(f'fprintf(nyaFp, "\'{i}:int\': %d", * {i});\n')
+                olist.append(f'fprintf(nyaFp, "\'{i}\': %d", * {i});\n')
+                functionListFile.write(f'\'{i}\': \'int\'')
         elif (fdict[funct].paramDict[i].pointerLevel > 0):
             olist.append(f'if({i} == NULL) {{\n')
-            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': 0x0");\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}\': 0x0");\n')
             olist.append(f'}}\n')
             olist.append(f'else {{\n')
-            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': %p", {i});\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}\': %p", {i});\n')
             olist.append(f'}}\n')
+            functionListFile.write(f'\'{i}\': \'ptr\'')
         elif (fdict[funct].paramDict[i].arrayLevel > 0):
             olist.append(f'if({i} == NULL) {{\n')
-            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': 0x0");\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}\': 0x0");\n')
             olist.append(f'}}\n')
             olist.append(f'else {{\n')
-            olist.append(f'    fprintf(nyaFp, "\'{i}:ptr\': %p", {i});\n')
+            olist.append(f'    fprintf(nyaFp, "\'{i}\': %p", {i});\n')
             olist.append(f'}}\n')
+            functionListFile.write(f'\'{i}\': \'ptr\'')
         else:
             print("Warning: passing on arg", i, "in", funct)
         if fdict[funct].paramConciseList.index(i) < len(fdict[funct].paramConciseList) - 1:
             olist.append(f'fprintf(nyaFp, ", ");\n')
+            functionListFile.write(f'\'{i}\': \', \'')
         # else:
         #     olist.append(f'fprintf(nyaFp, "\\n");\n')
     olist.append(f'fprintf(nyaFp, "}}");\n')
+    functionListFile.write('}\n')
 
     olist.append(
 '''
@@ -1725,13 +1744,22 @@ const char * get_op_name(MPI_Op op) {
 '''
     )
 
+    # __NYA__
+    functionDictFile = open('function_dict.py', 'w')
+    functionDictFile.write('functionDict = {\n')
+
     for funct in flist:
-        CreateWrapper(funct, olist)
+        CreateWrapper(funct, olist, functionDictFile)
     olist.append("\n")
     olist.append("\n")
     olist.append("/* eof */\n")
     g.writelines(olist)
     g.close()
+
+    # __NYA__
+    functionDictFile.write('}\n')
+    functionDictFile.write('functionList = [key for (key, value) in sorted(functionDict.items(), key=lambda x: x[1][\'id\'], reverse=False)]')
+    functionDictFile.close()
 
 
 def GetFortranSymbol(fsymtp, fsym) :
